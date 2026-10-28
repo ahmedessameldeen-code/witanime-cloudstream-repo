@@ -1,0 +1,20 @@
+[
+  {
+    "name": "WitAnime Pro",
+    "internalName": "Witanime",
+    "version": 5,
+    "status": 1,
+    "description": "WitAnime Arabic Anime Provider",
+    "authors": [
+      "ahmedessameldeen-code"
+    ],
+    "tvTypes": [
+      "Anime",
+      "AnimeMovie",
+      "OVA"
+    ],
+    "language": "ar",
+    "iconUrl": "https://www.google.com/s2/favicons?domain=witanime.site&sz=%size%",
+    "url": "https://raw.githubusercontent.com/ahmedessameldeen-code/witanime-cloudstream-repo/builds/Witanime.cs3"
+  }
+]
