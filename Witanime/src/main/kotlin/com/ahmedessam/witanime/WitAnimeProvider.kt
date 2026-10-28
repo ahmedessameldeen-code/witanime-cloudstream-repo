@@ -4,6 +4,8 @@ import android.util.Base64
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
+import com.lagradost.cloudstream3.plugins.BasePlugin
+import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import org.jsoup.Jsoup
@@ -15,6 +17,13 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
+
+@CloudstreamPlugin
+class WitAnimePlugin : BasePlugin() {
+    override fun load() {
+        registerMainAPI(WitAnimeProvider())
+    }
+}
 
 class WitAnimeProvider : MainAPI() {
     override var mainUrl = "https://witanime.site"
