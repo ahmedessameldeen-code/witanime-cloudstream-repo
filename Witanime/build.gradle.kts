@@ -2,7 +2,7 @@ apply(plugin = "com.android.library")
 apply(plugin = "kotlin-android")
 apply(plugin = "com.lagradost.cloudstream3.gradle")
 
-version = 9
+version = 10
 
 cloudstream {
     description = "WitAnime Arabic Anime Provider"

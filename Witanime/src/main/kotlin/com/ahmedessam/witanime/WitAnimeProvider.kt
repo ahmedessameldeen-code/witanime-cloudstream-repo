@@ -293,10 +293,88 @@ class WitAnimeProvider : MainAPI() {
     // SEARCH & QUICK SEARCH
     // ============================
 
-    override suspend fun quickSearch(query: String): List<SearchResponse> {
-        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
+    private val arabicAnimeAliases = listOf(
+        "ون بيس" to "One Piece",
+        "ناروتو" to "Naruto",
+        "بليتش" to "Bleach",
+        "هنتر" to "Hunter x Hunter",
+        "القناص" to "Hunter x Hunter",
+        "هجوم العمالقة" to "Shingeki no Kyojin",
+        "العمالقة" to "Shingeki no Kyojin",
+        "بلاك كلوفر" to "Black Clover",
+        "قاتل الشياطين" to "Kimetsu no Yaiba",
+        "كيميتسو" to "Kimetsu no Yaiba",
+        "جوجوتسو" to "Jujutsu Kaisen",
+        "سولو ليفلينج" to "Solo Leveling",
+        "دراجون بول" to "Dragon Ball",
+        "دراغون بول" to "Dragon Ball",
+        "كونان" to "Detective Conan",
+        "المحق كونان" to "Detective Conan",
+        "طوكيو غول" to "Tokyo Ghoul",
+        "طوكيو ريفنجرز" to "Tokyo Revengers",
+        "مذكرة الموت" to "Death Note",
+        "ديث نوت" to "Death Note",
+        "ون بنش مان" to "One Punch Man",
+        "الكيميائي المعدني" to "Fullmetal Alchemist",
+        "فول ميتال" to "Fullmetal Alchemist",
+        "ماي هيرو" to "Boku no Hero Academia",
+        "أكاديمية بطلي" to "Boku no Hero Academia",
+        "بوكونو هيرو" to "Boku no Hero Academia",
+        "بلو لوك" to "Blue Lock",
+        "هايكيو" to "Haikyuu",
+        "تشانسو مان" to "Chainsaw Man",
+        "رجل المنشار" to "Chainsaw Man",
+        "فينلاند ساغا" to "Vinland Saga",
+        "بيرسيرك" to "Berserk",
+        "مونستر" to "Monster",
+        "فريرن" to "Sousou no Frieren",
+        "مشرحة" to "Kusuriya no Hitorigoto",
+        "يوميات الصيدلانية" to "Kusuriya no Hitorigoto",
+        "أوفرلورد" to "Overlord",
+        "ري زيرو" to "Re:Zero",
+        "شتاينز غيت" to "Steins;Gate",
+        "كود غياس" to "Code Geass",
+        "فيري تيل" to "Fairy Tail",
+        "جينتاما" to "Gintama",
+        "غينتاما" to "Gintama",
+        "موب سايكو" to "Mob Psycho",
+        "دكتور ستون" to "Dr. Stone",
+        "سباي اكس فاميلي" to "Spy x Family",
+        "خطايا" to "Nanatsu no Taizai",
+        "الخطايا السبع" to "Nanatsu no Taizai",
+        "سورد آرت" to "Sword Art Online",
+        "باراسايت" to "Kiseijuu",
+        "الطفيليات" to "Kiseijuu",
+        "نيفرلاند" to "Yakusoku no Neverland",
+        "جوجو" to "JoJo",
+        "كينغدوم" to "Kingdom",
+        "سلام دانك" to "Slam Dunk",
+        "كابتن ماجد" to "Captain Tsubasa",
+        "انويشا" to "InuYasha",
+        "إينوياشا" to "InuYasha",
+        "يوغي" to "Yu-Gi-Oh",
+        "بوكيمون" to "Pokemon",
+        "أبطال الديجيتال" to "Digimon",
+        "ديجيمون" to "Digimon"
+    )
+
+    private fun resolveSearchQueries(rawQuery: String): List<String> {
+        val q = rawQuery.trim()
+        if (q.isEmpty()) return emptyList()
+        val queries = mutableListOf(q)
+        for ((ar, en) in arabicAnimeAliases) {
+            if (q.contains(ar, ignoreCase = true)) {
+                queries.add(en)
+            }
+        }
+        return queries.distinct()
+    }
+
+    private suspend fun fetchSuggestResults(q: String): List<SearchResponse> {
+        val encoded = URLEncoder.encode(q.trim(), "UTF-8")
         val url = "$mainUrl/search/suggest?q=$encoded"
-        val jsonText = app.get(url, headers = ajaxHeaders("$mainUrl/")).text
+        val jsonText = runCatching { app.get(url, headers = ajaxHeaders("$mainUrl/")).text }.getOrNull()
+            ?: return emptyList()
         val parsed = tryParseJson<SuggestResponse>(jsonText)
         return parsed?.results?.mapNotNull { item ->
             val title = item.title?.trim()?.ifEmpty { null } ?: return@mapNotNull null
@@ -312,13 +390,30 @@ class WitAnimeProvider : MainAPI() {
         } ?: emptyList()
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
+    private suspend fun fetchHtmlSearchResults(q: String): List<SearchResponse> {
+        val encoded = URLEncoder.encode(q.trim(), "UTF-8")
         val searchUrl = "$mainUrl/search?q=$encoded"
-        val doc = app.get(searchUrl, headers = docHeaders("$mainUrl/")).document
-        val results = parseCardsFromContainer(doc)
-        if (results.isNotEmpty()) return results
-        return quickSearch(query)
+        val doc = runCatching { app.get(searchUrl, headers = docHeaders("$mainUrl/")).document }.getOrNull()
+            ?: return emptyList()
+        return parseCardsFromContainer(doc)
+    }
+
+    override suspend fun quickSearch(query: String): List<SearchResponse> {
+        for (q in resolveSearchQueries(query)) {
+            val res = fetchSuggestResults(q)
+            if (res.isNotEmpty()) return res
+        }
+        return emptyList()
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val combined = LinkedHashMap<String, SearchResponse>()
+        for (q in resolveSearchQueries(query)) {
+            fetchHtmlSearchResults(q).forEach { combined.putIfAbsent(it.url, it) }
+            fetchSuggestResults(q).forEach { combined.putIfAbsent(it.url, it) }
+            if (combined.isNotEmpty()) break
+        }
+        return combined.values.toList()
     }
 
     // ============================
@@ -554,10 +649,10 @@ class WitAnimeProvider : MainAPI() {
             prioritizedTokens.add(yonaCandidate)
         }
 
-        // 2. Pick up to 4 top reliable direct/embed servers
-        val serverOrder = listOf("mp4upload", "ok", "videa", "dailymotion", "hgcloud", "videas", "dood", "streamwish", "vidbom")
+        // 2. Pick up to 5 top reliable direct/embed servers (videas = direct HLS M3U8, ok/videa/mp4upload/hgcloud = CloudStream extractors)
+        val serverOrder = listOf("videas", "ok", "mp4upload", "videa", "hgcloud", "dailymotion", "dood", "streamwish", "vidbom", "mega")
         for (srvKey in serverOrder) {
-            if (prioritizedTokens.size >= 5) break
+            if (prioritizedTokens.size >= 6) break
             val match = allServers.firstOrNull { (_, s) ->
                 val n = s.serverName?.lowercase() ?: ""
                 n.contains(srvKey) && prioritizedTokens.none { it.second.token == s.token }
@@ -567,14 +662,20 @@ class WitAnimeProvider : MainAPI() {
             }
         }
 
-        // 3. Fill remaining slots up to 5 tokens
+        // 3. Fill remaining slots up to 6 tokens
         for (entry in allServers) {
-            if (prioritizedTokens.size >= 5) break
+            if (prioritizedTokens.size >= 6) break
             val s = entry.second
             if (s.serverName?.contains("yonaplay", ignoreCase = true) == true) continue
             if (prioritizedTokens.none { it.second.token == s.token }) {
                 prioritizedTokens.add(entry)
             }
+        }
+
+        // Step 4: Also pick 1 mp4upload download token if available (uses separate /watch/download-source/ endpoint)
+        val mp4Download = (sourcesData.downloads ?: emptyMap()).entries.firstNotNullOfOrNull { (qKey, list) ->
+            list.firstOrNull { it.serverName?.contains("mp4upload", ignoreCase = true) == true && !it.token.isNullOrBlank() }
+                ?.let { qKey to it }
         }
 
         for ((qKey, srv) in prioritizedTokens) {
@@ -584,6 +685,19 @@ class WitAnimeProvider : MainAPI() {
                 val resolvedUrl = resolveWatchToken(token, watchUrl, csrfToken, sessionCookies)
                 if (!resolvedUrl.isNullOrBlank()) {
                     dispatchExtractorUrl(resolvedUrl, watchUrl, serverLabel, subtitleCallback, callback)
+                }
+            }
+        }
+
+        if (mp4Download != null) {
+            val (dlQ, dlSrv) = mp4Download
+            val dlToken = dlSrv.token
+            if (!dlToken.isNullOrBlank()) {
+                runCatching {
+                    val dlUrl = resolveDownloadToken(dlToken, watchUrl, csrfToken, sessionCookies)
+                    if (!dlUrl.isNullOrBlank()) {
+                        dispatchExtractorUrl(dlUrl, watchUrl, "mp4upload DL [${dlQ.uppercase()}]", subtitleCallback, callback)
+                    }
                 }
             }
         }
@@ -639,6 +753,53 @@ class WitAnimeProvider : MainAPI() {
         return location?.trim()?.takeIf { it.isNotEmpty() }
     }
 
+    private suspend fun resolveDownloadToken(
+        token: String,
+        watchUrl: String,
+        csrfToken: String,
+        sessionCookies: MutableMap<String, String>
+    ): String? {
+        val dlApiUrl = "$mainUrl/watch/download-source/$token"
+        val srcResp = app.post(
+            dlApiUrl,
+            headers = ajaxHeaders(watchUrl, csrfToken),
+            cookies = sessionCookies
+        )
+        if (srcResp.cookies.isNotEmpty()) {
+            sessionCookies.putAll(srcResp.cookies)
+        }
+        if (srcResp.code !in 200..299) return null
+
+        val gateUrl = "$mainUrl/watch/download-gate/$token"
+        val gateHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer" to "$mainUrl/",
+            "Sec-Ch-Ua" to "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            "Sec-Ch-Ua-Mobile" to "?0",
+            "Sec-Ch-Ua-Platform" to "\"Windows\"",
+            "Sec-Fetch-Dest" to "document",
+            "Sec-Fetch-Mode" to "navigate",
+            "Sec-Fetch-Site" to "same-origin",
+            "Upgrade-Insecure-Requests" to "1"
+        )
+        val gateResp = app.get(
+            gateUrl,
+            headers = gateHeaders,
+            cookies = sessionCookies,
+            allowRedirects = false
+        )
+        if (gateResp.cookies.isNotEmpty()) {
+            sessionCookies.putAll(gateResp.cookies)
+        }
+
+        val location = gateResp.headers["location"]
+            ?: gateResp.headers["Location"]
+            ?: Regex("""url=['"]?([^'">\s]+)""").find(gateResp.text)?.groupValues?.getOrNull(1)
+
+        return location?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     private suspend fun dispatchExtractorUrl(
         rawUrl: String,
         referer: String,
@@ -659,6 +820,9 @@ class WitAnimeProvider : MainAPI() {
             }
             cleanUrl.contains("dotplay.net", ignoreCase = true) -> {
                 extractDotPlay(cleanUrl, referer, serverLabel, callback)
+            }
+            cleanUrl.contains("videas.fr", ignoreCase = true) -> {
+                extractVideas(cleanUrl, referer, serverLabel, callback)
             }
             cleanUrl.endsWith(".mp4", ignoreCase = true) || cleanUrl.contains(".mp4?", ignoreCase = true) -> {
                 callback.invoke(
@@ -897,6 +1061,108 @@ class WitAnimeProvider : MainAPI() {
                 this.headers = mapOf("User-Agent" to USER_AGENT)
             }
         )
+    }
+
+    // ============================
+    // APP.VIDEAS.FR DIRECT HLS M3U8 EXTRACTOR
+    // ============================
+
+    data class VideasEmbedConfig(
+        @JsonProperty("apiBaseUrl") val apiBaseUrl: String? = null,
+        @JsonProperty("embedId") val embedId: String? = null,
+        @JsonProperty("opening") val opening: String? = null
+    )
+
+    data class VideasEmbedResponse(
+        @JsonProperty("uid") val uid: String? = null,
+        @JsonProperty("playback_token") val playbackToken: String? = null,
+        @JsonProperty("session_id") val sessionId: String? = null,
+        @JsonProperty("items") val items: List<VideasItem>? = null
+    )
+
+    data class VideasItem(
+        @JsonProperty("asset") val asset: VideasAsset? = null
+    )
+
+    data class VideasAsset(
+        @JsonProperty("uid") val uid: String? = null
+    )
+
+    data class VideasPlaybackInfo(
+        @JsonProperty("hls_url") val hlsUrl: VideasHlsUrl? = null
+    )
+
+    data class VideasHlsUrl(
+        @JsonProperty("url") val url: String? = null
+    )
+
+    private suspend fun extractVideas(
+        embedUrl: String,
+        referer: String,
+        serverLabel: String,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val hostBase = Regex("""^(https?://[^/]+)""").find(embedUrl)?.groupValues?.getOrNull(1)
+            ?: "https://app.videas.fr"
+
+        val pageHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer" to referer,
+            "Sec-Fetch-Dest" to "iframe",
+            "Sec-Fetch-Mode" to "navigate",
+            "Sec-Fetch-Site" to "cross-site"
+        )
+        val pageResp = app.get(embedUrl, headers = pageHeaders)
+        val configJson = pageResp.document.selectFirst("script#videas-embed-config")?.data()?.trim()
+            ?: return
+
+        val config = tryParseJson<VideasEmbedConfig>(configJson) ?: return
+        val embedId = config.embedId?.takeIf { it.isNotBlank() } ?: return
+        val opening = config.opening?.takeIf { it.isNotBlank() } ?: return
+
+        val visitorResp = app.get(
+            "$hostBase/api/visitor/embed/$embedId/",
+            headers = mapOf(
+                "User-Agent" to USER_AGENT,
+                "Accept" to "application/json",
+                "Referer" to embedUrl,
+                "X-Embed-Opening" to opening
+            ),
+            cookies = pageResp.cookies
+        )
+        val visitorData = tryParseJson<VideasEmbedResponse>(visitorResp.text) ?: return
+        val playbackToken = visitorData.playbackToken?.takeIf { it.isNotBlank() } ?: return
+        val assetId = visitorData.items?.firstOrNull()?.asset?.uid ?: visitorData.uid ?: embedId
+        val sessionId = visitorData.sessionId ?: ""
+
+        val infoResp = app.post(
+            "$hostBase/api/visitor/playback/info/",
+            headers = mapOf(
+                "User-Agent" to USER_AGENT,
+                "Accept" to "application/json",
+                "Content-Type" to "application/json",
+                "Origin" to hostBase,
+                "Referer" to embedUrl
+            ),
+            cookies = pageResp.cookies,
+            json = mapOf(
+                "asset_id" to assetId,
+                "playback_token" to playbackToken,
+                "session_id" to sessionId
+            )
+        )
+        val playbackInfo = tryParseJson<VideasPlaybackInfo>(infoResp.text) ?: return
+        val rawHls = playbackInfo.hlsUrl?.url?.trim()?.ifEmpty { null } ?: return
+        val fullHlsUrl = if (rawHls.startsWith("http")) rawHls else "$hostBase$rawHls"
+
+        M3u8Helper.generateM3u8(
+            source = name,
+            streamUrl = fullHlsUrl,
+            referer = "$hostBase/",
+            headers = mapOf("User-Agent" to USER_AGENT, "Origin" to hostBase),
+            name = "$name - $serverLabel"
+        ).forEach(callback)
     }
 
     private fun getQualityFromLabel(label: String): Int {
