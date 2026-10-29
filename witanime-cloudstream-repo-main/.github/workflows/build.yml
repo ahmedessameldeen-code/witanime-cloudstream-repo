@@ -1,0 +1,49 @@
+name: Build CloudStream Plugins
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compile CS3 Plugin & Generate plugins.json
+        run: |
+          gradle :Witanime:make makePluginsJson --stacktrace
+          mkdir -p build_out
+          cp repo.json build_out/repo.json
+          if [ -f build/plugins.json ]; then
+            cp build/plugins.json build_out/plugins.json
+          else
+            cp plugins.json build_out/plugins.json
+          fi
+          find . -name "*.cs3" -exec cp {} build_out/ \;
+          ls -la build_out/
+
+      - name: Deploy to Builds Branch
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: builds
+          folder: build_out
+          clean: true

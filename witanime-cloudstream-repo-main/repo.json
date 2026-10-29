@@ -1,0 +1,8 @@
+{
+  "name": "WitAnime Repository",
+  "description": "WitAnime Arabic Anime Provider by ahmedessameldeen-code",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/ahmedessameldeen-code/witanime-cloudstream-repo/builds/plugins.json"
+  ]
+}
