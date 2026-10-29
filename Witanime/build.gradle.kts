@@ -2,7 +2,7 @@ apply(plugin = "com.android.library")
 apply(plugin = "kotlin-android")
 apply(plugin = "com.lagradost.cloudstream3.gradle")
 
-version = 10
+version = 11
 
 cloudstream {
     description = "WitAnime Arabic Anime Provider"
@@ -19,4 +19,8 @@ dependencies {
     compileOnly("org.jsoup:jsoup:1.18.3")
     compileOnly("com.fasterxml.jackson.core:jackson-annotations:2.13.1")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+
+    add("testImplementation", "junit:junit:4.13.2")
+    add("testImplementation", "org.jsoup:jsoup:1.18.3")
+    add("testImplementation", "com.github.recloudstream.cloudstream:library:-SNAPSHOT")
 }
