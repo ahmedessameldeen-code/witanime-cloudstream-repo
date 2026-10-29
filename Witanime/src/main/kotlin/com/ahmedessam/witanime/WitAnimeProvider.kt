@@ -12,10 +12,9 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
+import java.security.MessageDigest
 import javax.crypto.Cipher
-import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 @CloudstreamPlugin
@@ -103,24 +102,18 @@ class WitAnimeProvider : MainAPI() {
     )
 
     data class WatchSourcesResponse(
+        @JsonProperty("players") val players: Map<String, List<QualityServer>>? = null,
         @JsonProperty("qualities") val qualities: Map<String, List<QualityServer>>? = null,
-        @JsonProperty("downloads") val downloads: Map<String, List<DownloadServer>>? = null
+        @JsonProperty("downloads") val downloads: Map<String, List<QualityServer>>? = null
     )
 
     data class QualityServer(
+        @JsonProperty("label") val label: String? = null,
         @JsonProperty("name") val name: String? = null,
         @JsonProperty("token") val token: String? = null
-    )
-
-    data class DownloadServer(
-        @JsonProperty("name") val name: String? = null,
-        @JsonProperty("url") val url: String? = null
-    )
-
-    data class StreamSourceResponse(
-        @JsonProperty("mode") val mode: String? = null,
-        @JsonProperty("url") val url: String? = null
-    )
+    ) {
+        val serverName: String? get() = label ?: name
+    }
 
     // ============================
     // MAIN PAGE SECTIONS (NETFLIX STYLE)
@@ -506,7 +499,6 @@ class WitAnimeProvider : MainAPI() {
     ): Boolean {
         val watchUrl = fixUrl(data)
 
-        // Step 1: Fetch the watch page and capture session cookies + CSRF token
         val watchResp = app.get(watchUrl, headers = docHeaders("$mainUrl/"))
         val sessionCookies = watchResp.cookies.toMutableMap()
         val doc = watchResp.document
@@ -521,7 +513,6 @@ class WitAnimeProvider : MainAPI() {
             ?.let { fixUrl(it) }
             ?: "${watchUrl.trimEnd('/')}/sources"
 
-        // Step 2: POST to /watch/.../sources with session cookies and X-CSRF-TOKEN
         val sourcesResp = app.post(
             rawSourcesUrl,
             headers = ajaxHeaders(watchUrl, csrfToken),
@@ -532,21 +523,18 @@ class WitAnimeProvider : MainAPI() {
         }
 
         val sourcesData = tryParseJson<WatchSourcesResponse>(sourcesResp.text) ?: return false
+        val playerMap = sourcesData.players ?: sourcesData.qualities ?: emptyMap()
 
-        // Step 3: Prioritize servers carefully to respect witanime.site's 20 req/min rate limit on /watch/*
-        // Note: 1 single "yonaplay" token unlocks the entire multi-server, multi-quality hub on mid.yonaplay.net
-        // without consuming any additional witanime.site rate-limit requests!
         val allServers = mutableListOf<Pair<String, QualityServer>>()
-        val qualityPriority = listOf("4k", "fhd", "hd", "sd")
+        val qualityPriority = listOf("4K", "FHD", "HD", "SD", "4k", "fhd", "hd", "sd")
         for (qKey in qualityPriority) {
-            sourcesData.qualities?.get(qKey)?.forEach { srv ->
+            playerMap[qKey]?.forEach { srv ->
                 if (!srv.token.isNullOrBlank()) {
                     allServers.add(qKey to srv)
                 }
             }
         }
-        // Also include any other quality keys not in qualityPriority
-        sourcesData.qualities?.forEach { (qKey, list) ->
+        playerMap.forEach { (qKey, list) ->
             if (qKey !in qualityPriority) {
                 list.forEach { srv ->
                     if (!srv.token.isNullOrBlank()) {
@@ -558,20 +546,20 @@ class WitAnimeProvider : MainAPI() {
 
         val prioritizedTokens = mutableListOf<Pair<String, QualityServer>>()
 
-        // 3a. Pick ONLY ONE yonaplay token (prefer FHD) because mid.yonaplay.net already contains all qualities/servers
+        // 1. Pick ONE yonaplay token first (1 token = multi-quality direct MP4 hub on mid.yonaplay.net)
         val yonaCandidate = allServers.firstOrNull { (_, s) ->
-            s.name?.contains("yonaplay", ignoreCase = true) == true
+            s.serverName?.contains("yonaplay", ignoreCase = true) == true
         }
         if (yonaCandidate != null) {
             prioritizedTokens.add(yonaCandidate)
         }
 
-        // 3b. Pick up to 4 top reliable direct/embed servers (prefer highest quality per server name)
+        // 2. Pick up to 4 top reliable direct/embed servers
         val serverOrder = listOf("mp4upload", "ok", "videa", "dailymotion", "hgcloud", "videas", "dood", "streamwish", "vidbom")
         for (srvKey in serverOrder) {
             if (prioritizedTokens.size >= 5) break
             val match = allServers.firstOrNull { (_, s) ->
-                val n = s.name?.lowercase() ?: ""
+                val n = s.serverName?.lowercase() ?: ""
                 n.contains(srvKey) && prioritizedTokens.none { it.second.token == s.token }
             }
             if (match != null) {
@@ -579,36 +567,23 @@ class WitAnimeProvider : MainAPI() {
             }
         }
 
-        // 3c. Fill remaining slots up to 5 tokens if needed
+        // 3. Fill remaining slots up to 5 tokens
         for (entry in allServers) {
             if (prioritizedTokens.size >= 5) break
             val s = entry.second
-            if (s.name?.contains("yonaplay", ignoreCase = true) == true) continue
+            if (s.serverName?.contains("yonaplay", ignoreCase = true) == true) continue
             if (prioritizedTokens.none { it.second.token == s.token }) {
                 prioritizedTokens.add(entry)
             }
         }
 
-        // Step 4: Resolve selected tokens sequentially (keeping session cookies updated)
         for ((qKey, srv) in prioritizedTokens) {
             val token = srv.token ?: continue
-            val serverLabel = "${srv.name ?: "Server"} [${qKey.uppercase()}]"
+            val serverLabel = "${srv.serverName ?: "Server"} [${qKey.uppercase()}]"
             runCatching {
                 val resolvedUrl = resolveWatchToken(token, watchUrl, csrfToken, sessionCookies)
                 if (!resolvedUrl.isNullOrBlank()) {
                     dispatchExtractorUrl(resolvedUrl, watchUrl, serverLabel, subtitleCallback, callback)
-                }
-            }
-        }
-
-        // Step 5: Also check direct download links for fast extractable hosts (e.g. mp4upload)
-        sourcesData.downloads?.forEach { (qKey, dlList) ->
-            dlList.forEach { dl ->
-                val dlUrl = dl.url?.trim().orEmpty()
-                if (dlUrl.contains("mp4upload.com", ignoreCase = true)) {
-                    runCatching {
-                        loadExtractor(dlUrl, watchUrl, subtitleCallback, callback)
-                    }
                 }
             }
         }
@@ -631,26 +606,23 @@ class WitAnimeProvider : MainAPI() {
         if (srcResp.cookies.isNotEmpty()) {
             sessionCookies.putAll(srcResp.cookies)
         }
+        if (srcResp.code !in 200..299) return null
 
-        val parsed = tryParseJson<StreamSourceResponse>(srcResp.text) ?: return null
-        val gateOrDirectUrl = parsed.url?.trim()?.ifEmpty { null } ?: return null
-
-        if (!gateOrDirectUrl.contains("/watch/stream-gate/")) {
-            return gateOrDirectUrl
-        }
-
-        // Follow stream-gate with allowRedirects = false to capture the Location header
+        val gateUrl = "$mainUrl/watch/stream-gate/$token"
         val gateHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Referer" to watchUrl,
+            "Referer" to "$mainUrl/",
+            "Sec-Ch-Ua" to "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            "Sec-Ch-Ua-Mobile" to "?0",
+            "Sec-Ch-Ua-Platform" to "\"Windows\"",
             "Sec-Fetch-Dest" to "iframe",
             "Sec-Fetch-Mode" to "navigate",
             "Sec-Fetch-Site" to "same-origin",
             "Upgrade-Insecure-Requests" to "1"
         )
         val gateResp = app.get(
-            fixUrl(gateOrDirectUrl),
+            gateUrl,
             headers = gateHeaders,
             cookies = sessionCookies,
             allowRedirects = false
@@ -661,6 +633,7 @@ class WitAnimeProvider : MainAPI() {
 
         val location = gateResp.headers["location"]
             ?: gateResp.headers["Location"]
+            ?: Regex("""url=['"]?([^'">\s]+)""").find(gateResp.text)?.groupValues?.getOrNull(1)
             ?: Regex("""window\.location\.replace\(['"]([^'"]+)['"]\)""").find(gateResp.text)?.groupValues?.getOrNull(1)
 
         return location?.trim()?.takeIf { it.isNotEmpty() }
@@ -718,19 +691,31 @@ class WitAnimeProvider : MainAPI() {
     // MID.YONAPLAY.NET AES-256-GCM DECRYPTOR
     // ============================
 
-    data class YonaEncryptedResponse(
-        @JsonProperty("encrypted_data") val encryptedData: String? = null
+    data class YonaInitResponse(
+        @JsonProperty("success") val success: Boolean? = null,
+        @JsonProperty("c") val code: String? = null,
+        @JsonProperty("t") val token: String? = null,
+        @JsonProperty("k") val pageKey: String? = null
     )
 
-    data class YonaDecryptedPayload(
-        @JsonProperty("StreamingServers") val streamingServers: List<YonaServerItem>? = null,
-        @JsonProperty("DownloadServers") val downloadServers: List<YonaServerItem>? = null
+    data class YonaSourcesResponse(
+        @JsonProperty("success") val success: Boolean? = null,
+        @JsonProperty("qualities") val qualities: Map<String, YonaQualityGroup>? = null
+    )
+
+    data class YonaQualityGroup(
+        @JsonProperty("servers") val servers: List<YonaServerItem>? = null
     )
 
     data class YonaServerItem(
-        @JsonProperty("serverName") val serverName: String? = null,
-        @JsonProperty("url") val url: String? = null,
-        @JsonProperty("quality") val quality: String? = null
+        @JsonProperty("name") val name: String? = null,
+        @JsonProperty("token") val token: String? = null
+    )
+
+    data class YonaApiResponse(
+        @JsonProperty("success") val success: Boolean? = null,
+        @JsonProperty("d") val encryptedData: String? = null,
+        @JsonProperty("r") val sendReferer: Int? = null
     )
 
     private suspend fun extractMidYonaPlay(
@@ -739,11 +724,9 @@ class WitAnimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val id = Regex("""[?&]id=([^&#]+)""").find(embedUrl)?.groupValues?.getOrNull(1) ?: return
         val hostBase = Regex("""^(https?://[^/]+)""").find(embedUrl)?.groupValues?.getOrNull(1)
             ?: "https://mid.yonaplay.net"
 
-        // Fetch embed page once to get session cookie if any
         val embedHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -753,12 +736,13 @@ class WitAnimeProvider : MainAPI() {
             "Sec-Fetch-Site" to "cross-site"
         )
         val embedResp = app.get(embedUrl, headers = embedHeaders)
-        val yonaCookies = embedResp.cookies
+        val yonaCookies = embedResp.cookies.toMutableMap()
 
         val apiHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "application/json, text/plain, */*",
             "Content-Type" to "application/json",
+            "X-Requested-With" to "XMLHttpRequest",
             "Origin" to hostBase,
             "Referer" to embedUrl,
             "Sec-Fetch-Dest" to "empty",
@@ -766,66 +750,80 @@ class WitAnimeProvider : MainAPI() {
             "Sec-Fetch-Site" to "same-origin"
         )
 
-        val apiResp = app.post(
-            "$hostBase/api/api.php",
+        val initResp = app.post(
+            "$hostBase/api/init-session.php",
             headers = apiHeaders,
             cookies = yonaCookies,
-            json = mapOf("id" to id)
+            json = emptyMap<String, String>()
         )
+        if (initResp.cookies.isNotEmpty()) yonaCookies.putAll(initResp.cookies)
 
-        val encWrapper = tryParseJson<YonaEncryptedResponse>(apiResp.text) ?: return
-        val encryptedBase64 = encWrapper.encryptedData?.takeIf { it.isNotBlank() } ?: return
+        val initData = tryParseJson<YonaInitResponse>(initResp.text) ?: return
+        val code = initData.code?.takeIf { it.isNotBlank() } ?: return
+        val pageKey = initData.pageKey?.takeIf { it.isNotBlank() } ?: return
 
-        val decryptedJson = decryptYonaPlayPayload(encryptedBase64, id) ?: return
-        val payload = tryParseJson<YonaDecryptedPayload>(decryptedJson) ?: return
+        val sourcesResp = app.post(
+            "$hostBase/api/sources.php",
+            headers = apiHeaders,
+            cookies = yonaCookies,
+            json = mapOf("code" to code)
+        )
+        if (sourcesResp.cookies.isNotEmpty()) yonaCookies.putAll(sourcesResp.cookies)
 
-        val servers = payload.streamingServers.orEmpty()
+        val sourcesData = tryParseJson<YonaSourcesResponse>(sourcesResp.text) ?: return
+        val qualitiesMap = sourcesData.qualities ?: return
 
-        // Prioritize dotplay.net first (direct archive.org MP4 streams!) + reliable embeds
-        val sortedServers = servers.sortedBy { srv ->
-            val u = srv.url?.lowercase().orEmpty()
-            when {
-                u.contains("dotplay.net") -> 0
-                u.contains("mp4upload.com") -> 1
-                u.contains("ok.ru") -> 2
-                u.contains("dailymotion.com") -> 3
-                u.contains("videa.hu") -> 4
-                else -> 5
-            }
-        }
+        val qualityOrder = listOf("4k", "fhd", "hd", "sd")
+        val orderedKeys = qualityOrder.filter { qualitiesMap.containsKey(it) } +
+            qualitiesMap.keys.filter { it !in qualityOrder }
 
-        for (srv in sortedServers) {
-            val srvUrl = srv.url?.trim()?.ifEmpty { null } ?: continue
-            val qLabel = srv.quality?.uppercase() ?: "HD"
-            val label = "YonaPlay (${srv.serverName ?: "Server"} - $qLabel)"
-            runCatching {
-                if (srvUrl.contains("dotplay.net", ignoreCase = true)) {
-                    extractDotPlay(srvUrl, embedUrl, label, callback, srv.quality)
-                } else {
-                    loadExtractor(srvUrl, embedUrl, subtitleCallback, callback)
+        for (qKey in orderedKeys) {
+            val servers = qualitiesMap[qKey]?.servers.orEmpty()
+            for (srv in servers) {
+                val srvToken = srv.token?.takeIf { it.isNotBlank() } ?: continue
+                runCatching {
+                    val apiResp = app.post(
+                        "$hostBase/api/api.php",
+                        headers = apiHeaders,
+                        cookies = yonaCookies,
+                        json = mapOf("code" to code, "token" to srvToken, "key" to pageKey)
+                    )
+                    if (apiResp.cookies.isNotEmpty()) yonaCookies.putAll(apiResp.cookies)
+
+                    val parsed = tryParseJson<YonaApiResponse>(apiResp.text) ?: return@runCatching
+                    val encryptedBase64 = parsed.encryptedData?.takeIf { it.isNotBlank() } ?: return@runCatching
+                    val decryptedUrl = decryptYonaPlayPayload(encryptedBase64, pageKey)
+                        ?.trim()
+                        ?.takeIf { it.startsWith("http") }
+                        ?: return@runCatching
+
+                    val label = "YonaPlay (${srv.name ?: "Server"} - ${qKey.uppercase()})"
+                    if (decryptedUrl.contains("dotplay.net", ignoreCase = true)) {
+                        extractDotPlay(decryptedUrl, "$hostBase/", label, callback, qKey)
+                    } else {
+                        loadExtractor(decryptedUrl, "$hostBase/", subtitleCallback, callback)
+                    }
                 }
             }
         }
     }
 
-    private fun decryptYonaPlayPayload(encryptedBase64: String, id: String): String? {
+    private fun decryptYonaPlayPayload(encryptedBase64: String, pageKey: String): String? {
         return runCatching {
             val raw = Base64.decode(encryptedBase64, Base64.DEFAULT)
             if (raw.size <= 28) return null
 
-            val salt = raw.copyOfRange(0, 16)
-            val iv = raw.copyOfRange(16, 28)
-            val ciphertextAndTag = raw.copyOfRange(28, raw.size)
+            val iv = raw.copyOfRange(0, 12)
+            val tag = raw.copyOfRange(12, 28)
+            val ciphertext = raw.copyOfRange(28, raw.size)
+            val combined = ciphertext + tag
 
-            val passphrase = "$id|9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f"
-            val spec = PBEKeySpec(passphrase.toCharArray(), salt, 100_000, 256)
-            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            val keyBytes = factory.generateSecret(spec).encoded
+            val keyBytes = MessageDigest.getInstance("SHA-256").digest(pageKey.toByteArray(Charsets.UTF_8))
             val secretKey = SecretKeySpec(keyBytes, "AES")
 
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-            val plainBytes = cipher.doFinal(ciphertextAndTag)
+            val plainBytes = cipher.doFinal(combined)
             String(plainBytes, Charsets.UTF_8)
         }.getOrNull()
     }
@@ -835,6 +833,8 @@ class WitAnimeProvider : MainAPI() {
     // ============================
 
     data class DotPlayResponse(
+        @JsonProperty("success") val success: Boolean? = null,
+        @JsonProperty("video_url") val videoUrl: String? = null,
         @JsonProperty("file") val file: String? = null
     )
 
@@ -845,11 +845,10 @@ class WitAnimeProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit,
         qualityHint: String? = null
     ) {
-        val id = Regex("""/player\d*/([^/?&#]+)""").find(dotPlayUrl)?.groupValues?.getOrNull(1) ?: return
+        val code = Regex("""/(?:embed|player\d*)/([^/?&#]+)""").find(dotPlayUrl)?.groupValues?.getOrNull(1) ?: return
         val hostBase = Regex("""^(https?://[^/]+)""").find(dotPlayUrl)?.groupValues?.getOrNull(1)
             ?: "https://dotplay.net"
 
-        // Visit player page first to establish session cookie
         val pageHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -862,27 +861,26 @@ class WitAnimeProvider : MainAPI() {
 
         val apiHeaders = mapOf(
             "User-Agent" to USER_AGENT,
-            "Accept" to "*/*",
-            "Content-Type" to "application/x-www-form-urlencoded",
-            "Origin" to hostBase,
+            "Accept" to "application/json",
             "Referer" to dotPlayUrl,
             "Sec-Fetch-Dest" to "empty",
             "Sec-Fetch-Mode" to "cors",
             "Sec-Fetch-Site" to "same-origin"
         )
 
-        val apiResp = app.post(
-            "$hostBase/api.php",
+        val apiResp = app.get(
+            "$hostBase/api.php?code=$code",
             headers = apiHeaders,
-            cookies = pageResp.cookies,
-            data = mapOf("id" to id)
+            cookies = pageResp.cookies
         )
 
         val parsed = tryParseJson<DotPlayResponse>(apiResp.text) ?: return
-        val encodedFile = parsed.file?.trim()?.ifEmpty { null } ?: return
+        val encodedFile = (parsed.videoUrl ?: parsed.file)?.trim()?.ifEmpty { null } ?: return
 
         val decodedUrl = runCatching {
-            String(Base64.decode(encodedFile, Base64.DEFAULT), Charsets.UTF_8).trim()
+            String(Base64.decode(encodedFile, Base64.DEFAULT), Charsets.UTF_8)
+                .substringBefore("|")
+                .trim()
         }.getOrNull()?.takeIf { it.startsWith("http") } ?: return
 
         val qualityValue = getQualityFromLabel(qualityHint ?: serverLabel)
