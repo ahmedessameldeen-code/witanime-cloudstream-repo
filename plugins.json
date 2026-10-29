@@ -1,0 +1,24 @@
+[
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=witanime.site&sz=%size%",
+        "fileHash": "sha256-fde9f4c718f38a2d389f87fce95e4f4c6cc5d641d32d69b25d05f243690edec9",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/ahmedessameldeen-code/witanime-cloudstream-repo",
+        "fileSize": 81977,
+        "status": 1,
+        "language": "ar",
+        "authors": [
+            "ahmedessameldeen-code"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "OVA"
+        ],
+        "version": 11,
+        "internalName": "Witanime",
+        "description": "WitAnime Arabic Anime Provider",
+        "url": "https://raw.githubusercontent.com/ahmedessameldeen-code/witanime-cloudstream-repo/builds/Witanime.cs3",
+        "name": "Witanime"
+    }
+]
