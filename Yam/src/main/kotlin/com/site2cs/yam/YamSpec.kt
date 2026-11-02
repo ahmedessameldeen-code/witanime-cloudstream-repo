@@ -17,7 +17,7 @@ object YamSpec : SiteSpec() {
     )
 
     override val search = SearchCfg(
-        path = "?s={query}",
+        path = "https://yam.ahwaktv.net/search.php?keywords={query}",
         method = "GET",
         body = "",
     )

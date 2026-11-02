@@ -26,7 +26,7 @@ home:
   path: /newvideos.php
   horizontal: false
 search:
-  path: ?s={query}
+  path: https://yam.ahwaktv.net/search.php?keywords={query}
   method: GET
   body: ''
 selectors:

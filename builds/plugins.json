@@ -23,10 +23,10 @@
     },
     {
         "iconUrl": "https://yam.ahwaktv.net/templates/ahwak/img/favicon-32x32.png",
-        "fileHash": "sha256-34c10a09a7a69d39cfc10d75f784ce44d60a3cd3e13b9ba68f98b7324188f8df",
+        "fileHash": "sha256-4338d06aa4e3ed20d9e57980fb15b055cf737dd47d0b72cdef5ab624faf1a502",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/ahmedessameldeen-code/witanime-cloudstream-repo",
-        "fileSize": 37731,
+        "fileSize": 37761,
         "status": 1,
         "language": "en",
         "authors": [
