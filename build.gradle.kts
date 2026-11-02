@@ -48,7 +48,10 @@ subprojects {
     }
 
     android {
-        namespace = "com.site2cs"
+        namespace = when (project.name) {
+            "Witanime" -> "com.ahmedessam.witanime"
+            else -> "com.site2cs.${project.name.lowercase()}"
+        }
 
         defaultConfig {
             minSdk = 21
