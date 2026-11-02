@@ -30,7 +30,7 @@ search:
   method: GET
   body: ''
 selectors:
-  cards: li
+  cards: ul.row li
   card_link: a[href*='watch']::attr(href)
   card_title: img::attr(alt)
   card_poster: img::attr(src)

@@ -23,7 +23,7 @@ object YamSpec : SiteSpec() {
     )
 
     override val selectors = Selectors(
-        cards = "li",
+        cards = "ul.row li",
         cardLink = "a[href*='watch']::attr(href)",
         cardTitle = "img::attr(alt)",
         cardPoster = "img::attr(src)",
