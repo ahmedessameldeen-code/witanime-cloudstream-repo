@@ -1,0 +1,9 @@
+{
+  "name": "My CloudStream Plugins",
+  "description": "CloudStream plugins generated with site2cs",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/ahmedessameldeen-code/witanime-cloudstream-repo/refs/heads/builds/plugins.json"
+  ],
+  "iconUrl": "https://yam.ahwaktv.net/templates/ahwak/img/favicon-32x32.png"
+}
