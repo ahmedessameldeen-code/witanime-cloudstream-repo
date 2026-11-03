@@ -15,7 +15,6 @@ Generated with [site2cs](https://github.com/). One Kotlin engine, one config per
 
 | Site | Module | Language | Types |
 | --- | --- | --- | --- |
-| اهواك تي في | `Yam` | en | TvSeries, Movie |
 | ‎ماي سيد - MySeed | `MySeed` | en | TvSeries, Movie |
 
 ## Rebuild locally

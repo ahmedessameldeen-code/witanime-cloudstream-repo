@@ -19,15 +19,108 @@ home:
 - name: Latest
   path: /main/
   horizontal: false
+- name: أفلام نتفليكس
+  path: /category/netflix/netflix-movies/
+  horizontal: false
+- name: أفلام أجنبية
+  path: /category/foreign-movies/
+  horizontal: false
+- name: أفلام آسيوية
+  path: /category/asian-movies/
+  horizontal: false
+- name: أفلام تركية
+  path: /category/turkish-movies/
+  horizontal: false
+- name: أفلام عربية
+  path: /category/arabic-movies/
+  horizontal: false
+- name: أفلام كلاسيكية
+  path: /category/افلام-كلاسيكيه/
+  horizontal: false
+- name: أفلام مدبلجة
+  path: /category/dubbed-movies/
+  horizontal: false
+- name: أفلام هندية
+  path: /category/indian-movies/
+  horizontal: false
+- name: مسلسلات نتفليكس
+  path: /category/netflix/netflix-series/
+  horizontal: false
+- name: مسلسلات أجنبية
+  path: /category/foreign-series/
+  horizontal: false
+- name: مسلسلات تركية
+  path: /category/turkish-series/
+  horizontal: false
+- name: مسلسلات عربية
+  path: /category/arabic-series/
+  horizontal: false
+- name: مسلسلات كرتون
+  path: /category/cartoon-series/
+  horizontal: false
+- name: مسلسلات كورية
+  path: /category/مسلسلات-كوريه/
+  horizontal: false
+- name: مسلسلات مدبلجة
+  path: /category/dubbed-series/
+  horizontal: false
+- name: مسلسلات مصرية
+  path: /category/مسلسلات-مصريه/
+  horizontal: false
+- name: مسلسلات هندية
+  path: /category/مسلسلات-هندية/
+  horizontal: false
+- name: رمضان
+  path: /category/مسلسلات-رمضان/
+  horizontal: false
+- name: رمضان 2026
+  path: /category/مسلسلات-رمضان/ramadan-series-2026/
+  horizontal: false
+- name: رمضان 2025
+  path: /category/مسلسلات-رمضان/ramadan-series-2025/
+  horizontal: false
+- name: رمضان 2024
+  path: /category/مسلسلات-رمضان/ramadan-series-2024/
+  horizontal: false
+- name: رمضان 2023
+  path: /category/مسلسلات-رمضان/ramadan-series-2023/
+  horizontal: false
+- name: أفلام أنيميشن
+  path: /category/animation-movies/
+  horizontal: false
+- name: مصارعة
+  path: /category/wwe-shows/
+  horizontal: false
+- name: أغاني عربية
+  path: /category/arabic-songs/
+  horizontal: false
+- name: مسلسلات رمضان 2022
+  path: /category/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86-2022/
+  horizontal: false
+- name: مسلسلات رمضان 2021
+  path: /category/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86-2021/
+  horizontal: false
+- name: مسلسلات رمضان 2020
+  path: /category/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86-2020-hd/
+  horizontal: false
+- name: مسلسلات رمضان 2019
+  path: /category/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86/%d9%85%d8%b3%d9%84%d8%b3%d9%84%d8%a7%d8%aa-%d8%b1%d9%85%d8%b6%d8%a7%d9%86-2019/
+  horizontal: false
+- name: برامج تلفزيونية
+  path: /category/%d8%a8%d8%b1%d8%a7%d9%85%d8%ac-%d8%aa%d9%84%d9%81%d8%b2%d9%8a%d9%88%d9%86%d9%8a%d8%a9/
+  horizontal: false
+- name: مسرحيات عربية
+  path: /category/%d9%85%d8%b3%d8%b1%d8%ad%d9%8a%d8%a7%d8%aa-%d8%b9%d8%b1%d8%a8%d9%8a/
+  horizontal: false
 search:
   path: ?s={query}
   method: GET
   body: ''
 selectors:
-  cards: ul.movie__blocks__ul li
-  card_link: a[href^='http']::attr(href)
+  cards: ul.movie__blocks__ul li, ul.movies__ul li
+  card_link: a.movie__block::attr(href)
   card_title: img::attr(alt)
-  card_poster: img::attr(data-src)
+  card_poster: img::attr(src)
   next_page: a.next::attr(href)
   detail_title: h1::text
   detail_poster: meta[property='og:image']::attr(content)

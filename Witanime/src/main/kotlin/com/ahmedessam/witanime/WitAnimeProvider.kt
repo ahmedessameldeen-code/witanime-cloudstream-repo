@@ -763,6 +763,9 @@ class WitAnimeProvider : MainAPI() {
     ): Boolean {
         val watchUrl = fixUrl(data)
         val candidates = LinkedHashMap<String, ServerCandidate>()
+        // Extra manifest tokens kept for a last-resort pass when the preferred
+        // servers all fail. This never runs for episodes that already work.
+        val extraTokens = mutableListOf<Pair<String, QualityServer>>()
 
         fun addCandidate(rawUrl: String?, tabLabel: String, qualityBadge: String, isDownload: Boolean = false) {
             val trimmed = rawUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return
@@ -881,6 +884,15 @@ class WitAnimeProvider : MainAPI() {
                             }
                         }
 
+                        // Keep the remaining manifest tokens as a fallback pool.
+                        // They are only attempted if every preferred server fails.
+                        for (entry in allServers) {
+                            val s = entry.second
+                            if (s.token.isNullOrBlank()) continue
+                            if (prioritizedTokens.any { it.second.token == s.token }) continue
+                            extraTokens.add(entry)
+                        }
+
                         for ((qKey, srv) in prioritizedTokens) {
                             val token = srv.token ?: continue
                             val srvName = srv.serverName ?: "Server"
@@ -932,6 +944,30 @@ class WitAnimeProvider : MainAPI() {
         for (candidate in candidates.values) {
             runCatching {
                 dispatchExtractorUrl(candidate, watchUrl, subtitleCallback, trackingCallback)
+            }
+        }
+
+        // Last-resort failover: the preferred servers produced nothing, so try
+        // the remaining manifest tokens one by one. Working episodes never reach
+        // this branch.
+        if (!emittedAny && extraTokens.isNotEmpty()) {
+            var attempted = 0
+            for ((qKey, srv) in extraTokens) {
+                if (emittedAny || attempted >= 4) break
+                val token = srv.token ?: continue
+                attempted++
+                runCatching {
+                    val resolvedUrl = resolveWatchToken(token, watchUrl, csrfToken ?: "", sessionCookies)
+                    if (!resolvedUrl.isNullOrBlank()) {
+                        val extraCandidate = ServerCandidate(
+                            url = resolvedUrl,
+                            tabLabel = srv.serverName ?: "Server",
+                            qualityBadge = normalizeQualityBadge(qKey),
+                            isDownload = false
+                        )
+                        dispatchExtractorUrl(extraCandidate, watchUrl, subtitleCallback, trackingCallback)
+                    }
+                }
             }
         }
 

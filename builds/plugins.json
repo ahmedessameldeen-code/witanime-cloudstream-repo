@@ -1,10 +1,10 @@
 [
     {
         "iconUrl": "",
-        "fileHash": "sha256-ae59ec2da7491703d2f895b2c23aea923bab37e70f34d0a149d182a9d5e2d811",
+        "fileHash": "sha256-71d7ac6c4cbc522d2ee4bee33137545fd05f022035d72f10ea340f60697c0afa",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/ahmedessameldeen-code/witanime-cloudstream-repo",
-        "fileSize": 37614,
+        "fileSize": 38922,
         "status": 1,
         "language": "en",
         "authors": [
@@ -22,10 +22,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=witanime.site&sz=%size%",
-        "fileHash": "sha256-8ae91292bd2d8558503081d78df9882515236569199367cc0fcc5ae0591ca873",
+        "fileHash": "sha256-90717ae2dbdfc5e745696df3a0e6d71c4f836eb0aac51dda370452c419b79c46",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/ahmedessameldeen-code/witanime-cloudstream-repo",
-        "fileSize": 90878,
+        "fileSize": 93535,
         "status": 1,
         "language": "ar",
         "authors": [
